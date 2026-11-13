@@ -11,12 +11,12 @@ The workflow has two separate connections:
 
 ## Current status
 
-This is an early scaffold. The server currently provides:
+This repository is the starting point for a Cline + DeepSeek workflow for working with Godot projects. The server currently provides:
 
 - `get_godot_version` — reports the installed Godot version.
 - `inspect_godot_project` — reads the project name, main scene, and configuration version from `project.godot`. It does not run the project.
 
-Running projects, collecting their output, and stopping them through Cline are planned next steps.
+The features in the roadmap below are planned and are not available yet. The goal is to build them incrementally, testing each tool with Cline and local Godot projects as the project evolves.
 
 ## Requirements
 
@@ -86,10 +86,32 @@ npm start
 
 ## Roadmap
 
-- Run a Godot project and return its output to Cline.
-- Stop a project started by the server.
-- Add project discovery and more detailed project inspection.
-- Consider scene editing tools after the run-and-debug workflow is established.
+Planned features, broadly following the capabilities of a Godot-focused MCP server:
+
+### Project and runtime workflow
+
+- [x] Get the installed Godot version.
+- [x] Inspect basic project metadata.
+- [ ] Discover and list Godot projects in a directory.
+- [ ] Return more detailed project structure and settings.
+- [ ] Launch the Godot editor for a project.
+- [ ] Run a project and return its debug output and errors to Cline.
+- [ ] Stop a project started by the MCP server.
+
+### Scene and resource tools
+
+- [ ] Create scenes with a selected root node type.
+- [ ] Add nodes to scenes and configure supported properties.
+- [ ] Load textures or sprites into `Sprite2D` nodes.
+- [ ] Save scenes and optionally create scene variants.
+- [ ] Export 3D scenes as `MeshLibrary` resources for use with `GridMap`.
+
+### Resource identifiers
+
+- [ ] Read resource UIDs for project files.
+- [ ] Refresh or update UID references by asking Godot to resave resources (Godot 4.4+).
+
+Features will be added incrementally. The exact tool behavior and supported Godot versions may be refined as they are implemented and tested.
 
 ## References
 
