@@ -17,7 +17,9 @@ The server currently provides:
 - `inspect_godot_project` — reads the project name, main scene, and configuration version from `project.godot`. It does not run the project.
 - `list_projects` — discovers projects beneath a directory with configurable depth and result limits.
 - `get_project_info` — returns project settings and a bounded list of project files.
-- `launch_editor` — opens the Godot editor for a project.
+- `launch_editor` — opens and tracks the Godot editor process for a project.
+- `get_editor_status` — returns status and process details for the editor launched by this server.
+- `stop_editor` — stops the editor process launched by this server.
 - `run_project` — runs a project and captures its standard output and errors. A `headless` option is available.
 - `get_debug_output` — returns recent output and process status for the project started by this server.
 - `stop_project` — stops the project started by this server.
@@ -29,7 +31,7 @@ The server currently provides:
 - `get_uid` — reads a resource UID.
 - `update_project_uids` — scans scene and resource files, then can resave them to refresh references.
 
-The server manages one running project at a time and keeps a bounded in-memory log buffer. Scene-writing and UID tools only accept project-relative `res://` paths. New scenes and MeshLibraries are not overwritten unless `overwrite=true`. UID refresh is a dry run by default; review its candidate list before calling it with `apply=true`.
+The server manages one running project and one editor process at a time and keeps a bounded in-memory log buffer. Scene-writing and UID tools only accept project-relative `res://` paths. New scenes and MeshLibraries are not overwritten unless `overwrite=true`. UID refresh is a dry run by default; review its candidate list before calling it with `apply=true`.
 
 The scene and UID operations use a bundled GDScript helper and have been designed for Godot 4.4 or newer. Run the tests and verify engine-dependent operations in a real Godot installation before using them on important projects.
 
@@ -88,17 +90,24 @@ If Godot is already available on `PATH`, you can omit the `env` section. Save th
 
 ## Try it
 
-Once the MCP server is connected, its tools should appear in Cline. For example, ask Cline to find Godot projects in a directory, open the editor, or run a project and report its errors. After starting a project, use `get_debug_output` to inspect its logs and `stop_project` to stop it.
+Once the MCP server is connected, its tools should appear in Cline. For example, ask Cline to find Godot projects in a directory, open the editor, or run a project and report its errors. Use `get_editor_status` and `stop_editor` to manage an editor launched by this server. After starting a project, use `get_debug_output` to inspect its logs and `stop_project` to stop it.
 
 The first runtime version runs one project at a time. Its recent output is kept in memory (up to 500 lines / 512 KiB) and is cleared when another project is started or the MCP server restarts.
 
-For scene operations, use paths such as `res://scenes/player.tscn` and `res://sprites/player.png`. Node property values support JSON values and typed objects for common Godot types:
+For scene operations, use paths such as `res://scenes/player.tscn` and `res://sprites/player.png`. Node property values support JSON values and typed objects for Godot built-in types, including vectors, colors, rectangles, quaternions, bases, transforms, AABBs, planes, node paths, resources, and packed arrays:
 
 ```json
 {
   "position": { "$type": "Vector2", "x": 120, "y": 80 },
   "modulate": { "$type": "Color", "r": 1, "g": 1, "b": 1, "a": 1 },
-  "texture": { "$type": "Resource", "path": "res://sprites/player.png" }
+  "texture": { "$type": "Resource", "path": "res://sprites/player.png" },
+  "points": {
+    "$type": "PackedVector2Array",
+    "values": [
+      { "$type": "Vector2", "x": 0, "y": 0 },
+      { "$type": "Vector2", "x": 120, "y": 80 }
+    ]
+  }
 }
 ```
 
@@ -137,6 +146,7 @@ The first project/runtime and scene/resource tools are implemented. The remainin
 - [x] Discover and list Godot projects in a directory.
 - [x] Return more detailed project structure and settings.
 - [x] Launch the Godot editor for a project.
+- [x] Track, inspect, and stop the editor process launched by the server.
 - [x] Run a project and return its debug output and errors to Cline.
 - [x] Stop a project started by the MCP server.
 
@@ -144,6 +154,7 @@ The first project/runtime and scene/resource tools are implemented. The remainin
 
 - [x] Create scenes with a selected root node type.
 - [x] Add nodes to scenes and configure supported properties.
+- [x] Decode common Godot built-in property types, including transforms and packed arrays.
 - [x] Load textures or sprites into `Sprite2D` nodes.
 - [x] Save scenes and optionally create scene variants.
 - [x] Export 3D scenes as `MeshLibrary` resources for use with `GridMap`, including static-body collisions when present.

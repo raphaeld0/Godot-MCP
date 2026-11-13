@@ -63,6 +63,8 @@ test("registers the Godot project and runtime tools", async () => {
     "get_uid",
     "update_project_uids",
     "launch_editor",
+    "get_editor_status",
+    "stop_editor",
     "run_project",
     "get_debug_output",
     "stop_project",
@@ -107,6 +109,16 @@ test("reports invalid project paths as tool errors", async () => {
   });
 
   assert.equal(response.isError, true);
+});
+
+test("reports editor status and stop errors when no editor was launched", async () => {
+  const status = await client.callTool({ name: "get_editor_status", arguments: {} });
+  const stop = await client.callTool({ name: "stop_editor", arguments: {} });
+
+  assert.equal(status.isError, true);
+  assert.match(status.content[0].text, /No Godot editor has been launched/);
+  assert.equal(stop.isError, true);
+  assert.match(stop.content[0].text, /No Godot editor has been launched/);
 });
 
 test("rejects scene paths that can escape the Godot project", async () => {

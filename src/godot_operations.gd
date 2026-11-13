@@ -207,6 +207,8 @@ func _decode_property_value(value: Variant) -> Variant:
 	if not value is Dictionary or not value.has("$type"):
 		return value
 	match String(value["$type"]):
+		"StringName":
+			return StringName(String(value.get("value", "")))
 		"Vector2":
 			return Vector2(float(value.get("x", 0)), float(value.get("y", 0)))
 		"Vector2i":
@@ -222,8 +224,79 @@ func _decode_property_value(value: Variant) -> Variant:
 				float(value.get("b", 0)),
 				float(value.get("a", 1))
 			)
+		"Rect2":
+			return Rect2(
+				Vector2(float(value.get("x", 0)), float(value.get("y", 0))),
+				Vector2(float(value.get("width", 0)), float(value.get("height", 0)))
+			)
+		"Rect2i":
+			return Rect2i(
+				Vector2i(int(value.get("x", 0)), int(value.get("y", 0))),
+				Vector2i(int(value.get("width", 0)), int(value.get("height", 0)))
+			)
+		"Quaternion":
+			return Quaternion(
+				float(value.get("x", 0)),
+				float(value.get("y", 0)),
+				float(value.get("z", 0)),
+				float(value.get("w", 1))
+			)
+		"Basis":
+			return Basis(
+				_decode_property_value(value.get("x", {"$type": "Vector3"})),
+				_decode_property_value(value.get("y", {"$type": "Vector3"})),
+				_decode_property_value(value.get("z", {"$type": "Vector3"}))
+			)
+		"Transform2D":
+			return Transform2D(
+				_decode_property_value(value.get("x", {"$type": "Vector2"})),
+				_decode_property_value(value.get("y", {"$type": "Vector2"})),
+				_decode_property_value(value.get("origin", {"$type": "Vector2"}))
+			)
+		"Transform3D":
+			return Transform3D(
+				_decode_property_value(value.get("basis", {"$type": "Basis"})),
+				_decode_property_value(value.get("origin", {"$type": "Vector3"}))
+			)
+		"AABB":
+			return AABB(
+				_decode_property_value(value.get("position", {"$type": "Vector3"})),
+				_decode_property_value(value.get("size", {"$type": "Vector3"}))
+			)
+		"Plane":
+			return Plane(
+				_decode_property_value(value.get("normal", {"$type": "Vector3"})),
+				float(value.get("d", 0))
+			)
 		"NodePath":
 			return NodePath(String(value.get("path", "")))
+		"PackedByteArray":
+			return PackedByteArray(value.get("values", []))
+		"PackedInt32Array":
+			return PackedInt32Array(value.get("values", []))
+		"PackedInt64Array":
+			return PackedInt64Array(value.get("values", []))
+		"PackedFloat32Array":
+			return PackedFloat32Array(value.get("values", []))
+		"PackedFloat64Array":
+			return PackedFloat64Array(value.get("values", []))
+		"PackedStringArray":
+			return PackedStringArray(value.get("values", []))
+		"PackedVector2Array":
+			var vectors_2: Array[Vector2] = []
+			for item in value.get("values", []):
+				vectors_2.append(_decode_property_value(item))
+			return PackedVector2Array(vectors_2)
+		"PackedVector3Array":
+			var vectors_3: Array[Vector3] = []
+			for item in value.get("values", []):
+				vectors_3.append(_decode_property_value(item))
+			return PackedVector3Array(vectors_3)
+		"PackedColorArray":
+			var colors: Array[Color] = []
+			for item in value.get("values", []):
+				colors.append(_decode_property_value(item))
+			return PackedColorArray(colors)
 		"Resource":
 			var resource_path := String(value.get("path", ""))
 			if _valid_resource_path(resource_path):

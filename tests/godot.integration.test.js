@@ -168,6 +168,27 @@ test("Godot engine: creates, edits, saves, and variants scenes", { skip: !godotE
   });
   assert.equal(sprite.isError, undefined, sprite.content[0]?.text);
 
+  const typedNode = await client.callTool({
+    name: "add_node",
+    arguments: {
+      projectPath: projectDirectory,
+      scenePath,
+      nodeType: "Line2D",
+      nodeName: "Path",
+      properties: {
+        points: {
+          $type: "PackedVector2Array",
+          values: [
+            { $type: "Vector2", x: 1, y: 2 },
+            { $type: "Vector2", x: 3, y: 4 },
+          ],
+        },
+        width: 3,
+      },
+    },
+  });
+  assert.equal(typedNode.isError, undefined, typedNode.content[0]?.text);
+
   const variant = await client.callTool({
     name: "save_scene",
     arguments: {
@@ -187,6 +208,32 @@ test("Godot engine: exports mesh instances with collision shapes to a MeshLibrar
       await client.callTool({
         name: "create_scene",
         arguments: { projectPath: projectDirectory, scenePath, rootType: "Node3D", rootName: "Tile" },
+      })
+    ).isError,
+    undefined,
+  );
+  assert.equal(
+    (
+      await client.callTool({
+        name: "add_node",
+        arguments: {
+          projectPath: projectDirectory,
+          scenePath,
+          nodeType: "Node3D",
+          nodeName: "TransformProbe",
+          properties: {
+            transform: {
+              $type: "Transform3D",
+              basis: {
+                $type: "Basis",
+                x: { $type: "Vector3", x: 1, y: 0, z: 0 },
+                y: { $type: "Vector3", x: 0, y: 1, z: 0 },
+                z: { $type: "Vector3", x: 0, y: 0, z: 1 },
+              },
+              origin: { $type: "Vector3", x: 5, y: 6, z: 7 },
+            },
+          },
+        },
       })
     ).isError,
     undefined,
@@ -313,4 +360,21 @@ test("Godot engine: runs and stops a headless project", { skip: !godotExecutable
   const stop = await client.callTool({ name: "stop_project", arguments: {} });
   assert.equal(stop.isError, undefined, stop.content[0]?.text);
   assert.match(stop.content[0].text, /Project stopped/);
+});
+
+test("Godot engine: tracks and stops an editor process", { skip: !godotExecutable }, async () => {
+  const start = await client.callTool({
+    name: "launch_editor",
+    arguments: { projectPath: projectDirectory },
+  });
+  assert.equal(start.isError, undefined, start.content[0]?.text);
+
+  const status = await client.callTool({ name: "get_editor_status", arguments: {} });
+  assert.equal(status.isError, undefined, status.content[0]?.text);
+  assert.match(status.content[0].text, /Project: .*sample-project/);
+  assert.match(status.content[0].text, /Status: running/);
+
+  const stop = await client.callTool({ name: "stop_editor", arguments: {} });
+  assert.equal(stop.isError, undefined, stop.content[0]?.text);
+  assert.match(stop.content[0].text, /Godot editor stopped/);
 });

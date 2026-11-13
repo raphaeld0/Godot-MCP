@@ -36,7 +36,7 @@ interface RunningProject {
   child: ChildProcess;
   projectPath: string;
   startedAt: string;
-  status: "running" | "stopping" | "stopped" | "exited" | "error";
+  status: ManagedProcessStatus;
   exitCode: number | null;
   logs: DebugLine[];
   logBytes: number;
@@ -52,12 +52,26 @@ interface RunningProject {
   resolveClosed: () => void;
 }
 
+type ManagedProcessStatus = "running" | "stopping" | "stopped" | "exited" | "error";
+
+interface ManagedEditor {
+  child: ChildProcess;
+  projectPath: string;
+  startedAt: string;
+  status: ManagedProcessStatus;
+  exitCode: number | null;
+  closed: Promise<void>;
+  resolveClosed: () => void;
+}
+
 const server = new McpServer({
   name: "godot-deepseek-mcp",
   version: "0.1.0",
 });
 
 let runningProject: RunningProject | undefined;
+let managedEditor: ManagedEditor | undefined;
+let startingProject = false;
 
 function executableCandidates(): string[] {
   const configuredPath = process.env.GODOT_PATH?.trim();
@@ -348,6 +362,68 @@ function attachProjectProcess(child: ChildProcess, projectPath: string): Running
   return project;
 }
 
+function attachEditorProcess(child: ChildProcess, projectPath: string): ManagedEditor {
+  let resolveClosed = () => {};
+  const closed = new Promise<void>((resolvePromise) => {
+    resolveClosed = resolvePromise;
+  });
+  const editor: ManagedEditor = {
+    child,
+    projectPath,
+    startedAt: new Date().toISOString(),
+    status: "running",
+    exitCode: null,
+    closed,
+    resolveClosed,
+  };
+
+  child.on("error", (error) => {
+    editor.status = "error";
+    appendLogLineForEditor(editor, `Godot editor process error: ${error.message}`);
+    editor.resolveClosed();
+  });
+  child.on("close", (code) => {
+    editor.exitCode = code;
+    if (editor.status !== "error") {
+      editor.status = editor.status === "stopping" ? "stopped" : "exited";
+    }
+    editor.resolveClosed();
+  });
+  return editor;
+}
+
+function appendLogLineForEditor(editor: ManagedEditor, message: string): void {
+  console.error(`[Godot editor PID ${editor.child.pid ?? "unknown"}] ${message}`);
+}
+
+async function stopChildProcess(
+  child: ChildProcess,
+  closed: Promise<void>,
+  markStopping: () => void,
+  isStopping: () => boolean,
+): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return;
+  }
+
+  markStopping();
+  if (!child.kill()) {
+    if (child.exitCode === null && child.signalCode === null) {
+      throw new Error(`Could not stop process ${child.pid ?? "(unknown PID)"}.`);
+    }
+    return;
+  }
+
+  const timeout = setTimeout(() => {
+    if (isStopping()) {
+      child.kill("SIGKILL");
+    }
+  }, 5_000);
+  timeout.unref();
+  await closed;
+  clearTimeout(timeout);
+}
+
 server.registerTool(
   "get_godot_version",
   {
@@ -627,27 +703,94 @@ server.registerTool(
 server.registerTool(
   "launch_editor",
   {
-    description: "Launch the Godot editor for a validated project directory.",
+    description:
+      "Launch and track the Godot editor for a validated project directory. Use get_editor_status and stop_editor to manage the launched process.",
     inputSchema: {
       projectPath: z.string().min(1).describe("Path to the Godot project folder."),
     },
   },
   async ({ projectPath }) => {
+    if (managedEditor?.status === "running" || managedEditor?.status === "stopping") {
+      if (managedEditor.projectPath === resolve(projectPath)) {
+        return textResult(
+          `Godot editor is already running for ${managedEditor.projectPath} (PID ${managedEditor.child.pid ?? "unknown"}).`,
+        );
+      }
+      throw new Error(
+        `Godot editor is already running for ${managedEditor.projectPath}. Stop it before opening another project.`,
+      );
+    }
+
     const directory = await validateProject(projectPath);
     const executable = await findGodotExecutable();
     const child = spawn(executable, ["--editor", "--path", directory], {
-      detached: true,
       stdio: "ignore",
       windowsHide: true,
     });
+    const editor = attachEditorProcess(child, directory);
+    managedEditor = editor;
 
     await new Promise<void>((resolvePromise, reject) => {
-      child.once("error", reject);
       child.once("spawn", resolvePromise);
+      child.once("error", reject);
+    }).catch((error: unknown) => {
+      editor.status = "error";
+      editor.resolveClosed();
+      throw new Error(
+        `Could not launch Godot editor: ${error instanceof Error ? error.message : String(error)}`,
+      );
     });
-    child.unref();
 
-    return textResult(`Godot editor launched for ${directory} (PID ${child.pid ?? "unknown"}).`);
+    return textResult(
+      `Godot editor launched for ${directory} (PID ${child.pid ?? "unknown"}). Use get_editor_status or stop_editor to manage it.`,
+    );
+  },
+);
+
+server.registerTool(
+  "get_editor_status",
+  {
+    description: "Return the status of the Godot editor process started by this server.",
+  },
+  async () => {
+    if (!managedEditor) {
+      throw new Error("No Godot editor has been launched by this server.");
+    }
+
+    return textResult(
+      [
+        `Project: ${managedEditor.projectPath}`,
+        `Status: ${managedEditor.status}`,
+        `PID: ${managedEditor.child.pid ?? "unknown"}`,
+        `Started: ${managedEditor.startedAt}`,
+        `Exit code: ${managedEditor.exitCode ?? "(still running or unavailable)"}`,
+      ].join("\n"),
+    );
+  },
+);
+
+server.registerTool(
+  "stop_editor",
+  {
+    description: "Stop the Godot editor process launched and managed by this server.",
+  },
+  async () => {
+    if (!managedEditor) {
+      throw new Error("No Godot editor has been launched by this server.");
+    }
+
+    const editor = managedEditor;
+    await stopChildProcess(
+      editor.child,
+      editor.closed,
+      () => {
+        editor.status = "stopping";
+      },
+      () => editor.status === "stopping",
+    );
+    return textResult(
+      `Godot editor ${editor.status}: ${editor.projectPath}\nExit code: ${editor.exitCode ?? "(unavailable)"}`,
+    );
   },
 );
 
@@ -662,42 +805,54 @@ server.registerTool(
     },
   },
   async ({ projectPath, headless }) => {
-    if (runningProject?.status === "running" || runningProject?.status === "stopping") {
+    if (
+      startingProject ||
+      runningProject?.status === "running" ||
+      runningProject?.status === "stopping"
+    ) {
       throw new Error(
-        `A project is already ${runningProject.status}: ${runningProject.projectPath}. Stop it before starting another.`,
+        startingProject
+          ? "A project is already starting. Wait for it to launch before starting another."
+          : `A project is already ${runningProject?.status}: ${runningProject?.projectPath}. Stop it before starting another.`,
       );
     }
 
-    const directory = await validateProject(projectPath);
-    const executable = await findGodotExecutable();
-    const args = ["--path", directory, "--verbose"];
-    if (headless) {
-      args.unshift("--headless");
-    }
-
-    const child = spawn(executable, args, {
-      windowsHide: true,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    const project = attachProjectProcess(child, directory);
-    runningProject = project;
-
+    startingProject = true;
+    let project: RunningProject | undefined;
     try {
+      const directory = await validateProject(projectPath);
+      const executable = await findGodotExecutable();
+      const args = ["--path", directory, "--verbose"];
+      if (headless) {
+        args.unshift("--headless");
+      }
+
+      const child = spawn(executable, args, {
+        windowsHide: true,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      project = attachProjectProcess(child, directory);
+      runningProject = project;
+
       await new Promise<void>((resolvePromise, reject) => {
         child.once("error", reject);
         child.once("spawn", resolvePromise);
       });
-    } catch (error) {
-      project.status = "error";
-      project.resolveClosed();
-      throw new Error(
-        `Could not launch Godot: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
 
-    return textResult(
-      `Project started: ${directory}\nPID: ${child.pid ?? "unknown"}\nHeadless: ${headless}\nUse get_debug_output to read logs and stop_project to stop it.`,
-    );
+      return textResult(
+        `Project started: ${directory}\nPID: ${child.pid ?? "unknown"}\nHeadless: ${headless}\nUse get_debug_output to read logs and stop_project to stop it.`,
+      );
+    } catch (error) {
+      if (project?.status === "running" && !project.child.pid) {
+        project.status = "error";
+        project.resolveClosed();
+      }
+      throw new Error(
+        `Could not launch Godot project: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    } finally {
+      startingProject = false;
+    }
   },
 );
 
@@ -743,16 +898,14 @@ server.registerTool(
 
     const project = runningProject;
     if (project.status === "running") {
-      project.status = "stopping";
-      project.child.kill();
-      const timeout = setTimeout(() => {
-        if (project.status === "stopping") {
-          project.child.kill("SIGKILL");
-        }
-      }, 5_000);
-      timeout.unref();
-      await project.closed;
-      clearTimeout(timeout);
+      await stopChildProcess(
+        project.child,
+        project.closed,
+        () => {
+          project.status = "stopping";
+        },
+        () => project.status === "stopping",
+      );
     }
 
     return textResult(
@@ -776,11 +929,18 @@ process.on("exit", () => {
   if (runningProject?.status === "running" || runningProject?.status === "stopping") {
     runningProject.child.kill();
   }
+  if (managedEditor?.status === "running" || managedEditor?.status === "stopping") {
+    managedEditor.child.kill();
+  }
 });
 
 process.stdin.on("end", () => {
   if (runningProject?.status === "running") {
     runningProject.status = "stopping";
     runningProject.child.kill();
+  }
+  if (managedEditor?.status === "running") {
+    managedEditor.status = "stopping";
+    managedEditor.child.kill();
   }
 });
