@@ -1,6 +1,6 @@
 # Godot DeepSeek MCP
 
-Godot DeepSeek MCP is a local [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that lets [Cline](https://cline.bot/) use tools for inspecting and controlling Godot projects, while Cline uses the DeepSeek API as its AI provider.
+Godot DeepSeek MCP is a local [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that lets [Cline](https://cline.bot/) inspect and control Godot projects, while Cline uses the DeepSeek API as its AI provider.
 
 The workflow has two separate connections:
 
@@ -11,23 +11,33 @@ The workflow has two separate connections:
 
 ## Current status
 
-This repository is the starting point for a Cline + DeepSeek workflow for working with Godot projects. The server currently provides:
+The server currently provides:
 
 - `get_godot_version` — reports the installed Godot version.
 - `inspect_godot_project` — reads the project name, main scene, and configuration version from `project.godot`. It does not run the project.
 - `list_projects` — discovers projects beneath a directory with configurable depth and result limits.
+- `get_project_info` — returns project settings and a bounded list of project files.
 - `launch_editor` — opens the Godot editor for a project.
 - `run_project` — runs a project and captures its standard output and errors. A `headless` option is available.
 - `get_debug_output` — returns recent output and process status for the project started by this server.
 - `stop_project` — stops the project started by this server.
+- `create_scene` — creates a scene with a built-in Godot node as its root.
+- `add_node` — adds a built-in node to a scene, sets supported properties, and saves the scene.
+- `load_sprite` — adds a `Sprite2D` node with a project texture to a scene.
+- `save_scene` — saves a scene or writes a copy to a new path as a variant.
+- `export_mesh_library` — exports mesh instances and supported static-body collision shapes to a `MeshLibrary`.
+- `get_uid` — reads a resource UID.
+- `update_project_uids` — scans scene and resource files, then can resave them to refresh references.
 
-The server manages one running project at a time and keeps a bounded in-memory log buffer. The scene and resource tools in the roadmap are not available yet; they will be added incrementally and tested with Cline and local Godot projects.
+The server manages one running project at a time and keeps a bounded in-memory log buffer. Scene-writing and UID tools only accept project-relative `res://` paths. New scenes and MeshLibraries are not overwritten unless `overwrite=true`. UID refresh is a dry run by default; review its candidate list before calling it with `apply=true`.
+
+The scene and UID operations use a bundled GDScript helper and have been designed for Godot 4.4 or newer. Run the tests and verify engine-dependent operations in a real Godot installation before using them on important projects.
 
 ## Requirements
 
 - Node.js 20 or newer
 - npm
-- Godot installed locally
+- Godot 4.4 or newer installed locally
 - Cline for VS Code, configured with a DeepSeek API key
 
 ## Configure DeepSeek in Cline
@@ -82,6 +92,18 @@ Once the MCP server is connected, its tools should appear in Cline. For example,
 
 The first runtime version runs one project at a time. Its recent output is kept in memory (up to 500 lines / 512 KiB) and is cleared when another project is started or the MCP server restarts.
 
+For scene operations, use paths such as `res://scenes/player.tscn` and `res://sprites/player.png`. Node property values support JSON values and typed objects for common Godot types:
+
+```json
+{
+  "position": { "$type": "Vector2", "x": 120, "y": 80 },
+  "modulate": { "$type": "Color", "r": 1, "g": 1, "b": 1, "a": 1 },
+  "texture": { "$type": "Resource", "path": "res://sprites/player.png" }
+}
+```
+
+`update_project_uids` initially returns the files it would resave without writing project resources. Set `apply=true` only after reviewing that list; the apply action resaves `.tscn`, `.tres`, `.res`, and `.scn` files.
+
 To build and launch the server manually during development:
 
 ```bash
@@ -91,34 +113,47 @@ npm start
 
 `npm start` launches the MCP server over standard input/output and is intended to be run by an MCP client such as Cline.
 
+Run the MCP tests with:
+
+```powershell
+npm test
+```
+
+Engine integration tests are skipped unless `GODOT_TEST_PATH` points to a Godot 4 executable. For example, in PowerShell:
+
+```powershell
+$env:GODOT_TEST_PATH = "C:\Path\To\Godot\Godot_v4.4-stable_win64_console.exe"
+npm test
+```
+
 ## Roadmap
 
-Planned features, broadly following the capabilities of a Godot-focused MCP server:
+The first project/runtime and scene/resource tools are implemented. The remaining work is to test them across Godot versions and broaden project inspection and resource conversion support.
 
 ### Project and runtime workflow
 
 - [x] Get the installed Godot version.
 - [x] Inspect basic project metadata.
 - [x] Discover and list Godot projects in a directory.
-- [ ] Return more detailed project structure and settings.
+- [x] Return more detailed project structure and settings.
 - [x] Launch the Godot editor for a project.
 - [x] Run a project and return its debug output and errors to Cline.
 - [x] Stop a project started by the MCP server.
 
 ### Scene and resource tools
 
-- [ ] Create scenes with a selected root node type.
-- [ ] Add nodes to scenes and configure supported properties.
-- [ ] Load textures or sprites into `Sprite2D` nodes.
-- [ ] Save scenes and optionally create scene variants.
-- [ ] Export 3D scenes as `MeshLibrary` resources for use with `GridMap`.
+- [x] Create scenes with a selected root node type.
+- [x] Add nodes to scenes and configure supported properties.
+- [x] Load textures or sprites into `Sprite2D` nodes.
+- [x] Save scenes and optionally create scene variants.
+- [x] Export 3D scenes as `MeshLibrary` resources for use with `GridMap`, including static-body collisions when present.
 
 ### Resource identifiers
 
-- [ ] Read resource UIDs for project files.
-- [ ] Refresh or update UID references by asking Godot to resave resources (Godot 4.4+).
+- [x] Read resource UIDs for project files (Godot 4.4+).
+- [x] Preview and optionally refresh resource references by resaving scene/resource files (Godot 4.4+).
 
-Features will be added incrementally. The exact tool behavior and supported Godot versions may be refined as they are implemented and tested.
+The engine integration suite has been run against Godot 4.4.1 on Windows. The roadmap describes implemented tool coverage; other Godot versions and project configurations may still need additional validation.
 
 ## References
 

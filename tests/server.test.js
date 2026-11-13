@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import { join, resolve } from "node:path";
 import test, { after, before } from "node:test";
@@ -53,12 +53,24 @@ test("registers the Godot project and runtime tools", async () => {
   assert.deepEqual(names, [
     "get_godot_version",
     "inspect_godot_project",
+    "get_project_info",
     "list_projects",
+    "create_scene",
+    "add_node",
+    "load_sprite",
+    "save_scene",
+    "export_mesh_library",
+    "get_uid",
+    "update_project_uids",
     "launch_editor",
     "run_project",
     "get_debug_output",
     "stop_project",
   ]);
+});
+
+test("build packages the bundled Godot operations script", async () => {
+  await access(resolve("dist/godot_operations.gd"));
 });
 
 test("inspects project metadata from project.godot", async () => {
@@ -95,6 +107,35 @@ test("reports invalid project paths as tool errors", async () => {
   });
 
   assert.equal(response.isError, true);
+});
+
+test("rejects scene paths that can escape the Godot project", async () => {
+  const response = await client.callTool({
+    name: "create_scene",
+    arguments: {
+      projectPath: projectDirectory,
+      scenePath: "res://../outside.tscn",
+    },
+  });
+
+  assert.equal(response.isError, true);
+  assert.match(response.content[0].text, /inside the Godot project/);
+});
+
+test("UID resaving is exposed with an explicit dry-run default", async () => {
+  const toolsResponse = await client.listTools();
+  const tool = toolsResponse.tools.find((candidate) => candidate.name === "update_project_uids");
+  assert.ok(tool);
+  assert.match(tool.description, /safe dry run/);
+
+  const invalidPath = await client.callTool({
+    name: "get_uid",
+    arguments: {
+      projectPath: projectDirectory,
+      resourcePath: "res://../outside.tscn",
+    },
+  });
+  assert.equal(invalidPath.isError, true);
 });
 
 test("captures process output and exit status for a launched project", async () => {
