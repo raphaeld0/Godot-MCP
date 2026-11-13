@@ -16,7 +16,7 @@ This is an early scaffold. The server currently provides:
 - `get_godot_version` — reports the installed Godot version.
 - `inspect_godot_project` — reads the project name, main scene, and configuration version from `project.godot`. It does not run the project.
 
-Running projects, collecting their output, and stopping them are planned next steps.
+Running projects, collecting their output, and stopping them through Cline are planned next steps.
 
 ## Requirements
 
@@ -86,7 +86,7 @@ npm start
 
 ## Roadmap
 
-- Run a Godot project and return its output to Codex.
+- Run a Godot project and return its output to Cline.
 - Stop a project started by the server.
 - Add project discovery and more detailed project inspection.
 - Consider scene editing tools after the run-and-debug workflow is established.
