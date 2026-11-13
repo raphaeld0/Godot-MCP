@@ -2,13 +2,14 @@
   "name": "godot-deepseek-mcp",
   "version": "0.1.0",
   "private": true,
-  "description": "A local MCP server that gives Codex tools for inspecting Godot projects.",
+  "description": "A local MCP server that gives Cline tools for inspecting and controlling Godot projects.",
   "type": "module",
   "engines": {
     "node": ">=20.0.0"
   },
   "scripts": {
     "build": "tsc",
+    "test": "npm run build && node --test",
     "start": "node dist/index.js"
   },
   "dependencies": {

@@ -15,8 +15,13 @@ This repository is the starting point for a Cline + DeepSeek workflow for workin
 
 - `get_godot_version` — reports the installed Godot version.
 - `inspect_godot_project` — reads the project name, main scene, and configuration version from `project.godot`. It does not run the project.
+- `list_projects` — discovers projects beneath a directory with configurable depth and result limits.
+- `launch_editor` — opens the Godot editor for a project.
+- `run_project` — runs a project and captures its standard output and errors. A `headless` option is available.
+- `get_debug_output` — returns recent output and process status for the project started by this server.
+- `stop_project` — stops the project started by this server.
 
-The features in the roadmap below are planned and are not available yet. The goal is to build them incrementally, testing each tool with Cline and local Godot projects as the project evolves.
+The server manages one running project at a time and keeps a bounded in-memory log buffer. The scene and resource tools in the roadmap are not available yet; they will be added incrementally and tested with Cline and local Godot projects.
 
 ## Requirements
 
@@ -73,7 +78,9 @@ If Godot is already available on `PATH`, you can omit the `env` section. Save th
 
 ## Try it
 
-Once the MCP server is connected, its tools should appear in Cline. For example, ask Cline to check the local Godot version or inspect a project folder containing `project.godot`.
+Once the MCP server is connected, its tools should appear in Cline. For example, ask Cline to find Godot projects in a directory, open the editor, or run a project and report its errors. After starting a project, use `get_debug_output` to inspect its logs and `stop_project` to stop it.
+
+The first runtime version runs one project at a time. Its recent output is kept in memory (up to 500 lines / 512 KiB) and is cleared when another project is started or the MCP server restarts.
 
 To build and launch the server manually during development:
 
@@ -92,11 +99,11 @@ Planned features, broadly following the capabilities of a Godot-focused MCP serv
 
 - [x] Get the installed Godot version.
 - [x] Inspect basic project metadata.
-- [ ] Discover and list Godot projects in a directory.
+- [x] Discover and list Godot projects in a directory.
 - [ ] Return more detailed project structure and settings.
-- [ ] Launch the Godot editor for a project.
-- [ ] Run a project and return its debug output and errors to Cline.
-- [ ] Stop a project started by the MCP server.
+- [x] Launch the Godot editor for a project.
+- [x] Run a project and return its debug output and errors to Cline.
+- [x] Stop a project started by the MCP server.
 
 ### Scene and resource tools
 
